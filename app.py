@@ -1,6 +1,7 @@
 import os
-from flask import Flask, render_template_string
+from flask import Flask, request, send_file, jsonify, render_template_string
 from flask_cors import CORS
+import fitz  # PyMuPDF engine
 
 app = Flask(__name__)
 CORS(app)
@@ -11,10 +12,8 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit.Me - LightPDF Style Editor</title>
-    <!-- PDF.js & pdf-lib Libraries -->
+    <title>Edit.Me - Professional PDF Editor</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <style>
         :root {
@@ -27,9 +26,9 @@ HTML_TEMPLATE = """
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
-        body { background-color: var(--bg-dark); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
+        body { background-color: var(--bg-dark); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
 
-        /* Premium Header */
+        /* Header Branding */
         header {
             background: rgba(30, 41, 59, 0.9);
             backdrop-filter: blur(12px);
@@ -44,13 +43,13 @@ HTML_TEMPLATE = """
         }
 
         .brand-container { display: flex; align-items: center; gap: 12px; }
-        .logo-svg { width: 36px; height: 36px; filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5)); }
+        .logo-svg { width: 34px; height: 34px; filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5)); }
         .brand-title { font-size: 1.4rem; font-weight: 800; background: linear-gradient(135deg, #818cf8, #06b6d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .co-brand { font-size: 0.85rem; color: #94a3b8; font-weight: 500; }
         .co-brand span { color: var(--accent); font-weight: 700; }
 
-        /* Main Workspace */
-        main { flex: 1; padding: 1.5rem; display: flex; flex-direction: column; align-items: center; }
+        /* Main Section */
+        main { flex: 1; padding: 2rem; display: flex; flex-direction: column; align-items: center; }
 
         .upload-card {
             background: var(--card-bg);
@@ -63,18 +62,14 @@ HTML_TEMPLATE = """
             cursor: pointer;
             transition: all 0.3s ease;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            margin-top: 3rem;
+            margin-top: 2rem;
         }
 
-        .upload-card:hover {
-            border-color: var(--primary);
-            transform: translateY(-4px);
-        }
-
+        .upload-card:hover { border-color: var(--primary); transform: translateY(-3px); }
         .upload-icon { font-size: 3.5rem; color: var(--primary); margin-bottom: 1rem; }
         .btn-upload { background: linear-gradient(135deg, var(--primary), var(--accent)); color: white; padding: 12px 28px; border-radius: 30px; border: none; font-weight: 600; margin-top: 1.5rem; cursor: pointer; }
 
-        /* LightPDF Style Toolbar */
+        /* Editor Workspace */
         #editor-workspace { display: none; width: 100%; max-width: 1100px; }
         .toolbar {
             background: var(--card-bg);
@@ -86,47 +81,18 @@ HTML_TEMPLATE = """
             align-items: center;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
             position: sticky;
-            top: 70px;
+            top: 65px;
             z-index: 90;
         }
 
-        .tool-btn {
-            background: #334155;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-weight: 500;
-        }
-        .tool-btn:hover { background: var(--primary); }
-        .action-btn { background: #10b981; margin-left: auto; }
-        .action-btn:hover { background: #059669; }
-
-        /* PDF Viewer Container */
         .pdf-container { display: flex; flex-direction: column; gap: 2rem; align-items: center; }
-        .page-wrapper {
-            position: relative;
-            background: white;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-        }
+        .page-wrapper { position: relative; background: white; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
 
-        /* LightPDF Native Text Selection Layer */
-        .text-layer {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            overflow: hidden;
-            opacity: 1;
-            line-height: 1.0;
-        }
-
+        .text-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; }
         .text-layer span {
             position: absolute;
             color: transparent;
-            cursor: text;
+            cursor: pointer;
             white-space: pre;
             transform-origin: 0% 0%;
             border: 1px transparent dashed;
@@ -134,17 +100,37 @@ HTML_TEMPLATE = """
         }
 
         .text-layer span:hover {
-            border-color: rgba(99, 102, 241, 0.6);
-            background: rgba(99, 102, 241, 0.1);
+            border-color: #6366f1;
+            background: rgba(99, 102, 241, 0.15);
         }
 
-        .text-layer span[contenteditable="true"] {
-            color: #000 !important;
-            background: #ffffff !important;
-            border: 1px solid var(--primary) !important;
-            outline: none;
-            z-index: 10;
+        /* Edit Modal Popup */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
         }
+
+        .modal {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 2rem;
+            width: 90%;
+            max-width: 450px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .modal h3 { margin-bottom: 1rem; color: var(--text); }
+        .modal input { width: 100%; padding: 10px; margin-bottom: 1rem; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; }
+        .modal-buttons { display: flex; gap: 10px; justify-content: flex-end; }
+        .btn-cancel { background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
+        .btn-save { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -164,40 +150,59 @@ HTML_TEMPLATE = """
         <div class="upload-card" id="upload-card" onclick="document.getElementById('file-input').click()">
             <i class="fa-solid fa-file-pdf upload-icon"></i>
             <h2>Upload PDF to Edit</h2>
-            <p style="color: #94a3b8; margin-top: 8px;">Click any text in your document to edit directly</p>
-            <button class="btn-upload">Choose PDF File</button>
+            <p style="color: #94a3b8; margin-top: 8px;">Click any text element on your PDF to update it precisely</p>
+            <button class="btn-upload">Select PDF Document</button>
             <input type="file" id="file-input" accept="application/pdf" style="display: none;" onchange="handleFileSelect(event)">
         </div>
 
         <div id="editor-workspace">
             <div class="toolbar">
-                <button class="tool-btn action-btn" onclick="exportPDF()"><i class="fa-solid fa-download"></i> Save & Download</button>
-                <button class="tool-btn" onclick="window.print()"><i class="fa-solid fa-print"></i> Print</button>
+                <span style="font-weight: 600; color: #94a3b8;">Click on any text on the page to modify</span>
             </div>
             <div id="pdf-container" class="pdf-container"></div>
         </div>
     </main>
 
+    <!-- Modal Popup for precise backend editing -->
+    <div class="modal-overlay" id="edit-modal">
+        <div class="modal">
+            <h3>Edit Text Element</h3>
+            <label style="font-size: 0.85rem; color: #94a3b8;">Target Original Text:</label>
+            <input type="text" id="modal-old-text" readonly style="opacity: 0.7;">
+            
+            <label style="font-size: 0.85rem; color: #94a3b8;">Replacement Text:</label>
+            <input type="text" id="modal-new-text">
+            
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn-save" onclick="applyBackendEdit()">Apply & Download PDF</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        let rawPdfBytes = null;
-        let pdfDoc = null;
-        let editedItems = [];
+        let currentFile = null;
+        let selectedTargetText = '';
 
-        async function handleFileSelect(e) {
+        function handleFileSelect(e) {
             const file = e.target.files[0];
             if (!file) return;
 
-            rawPdfBytes = await file.arrayBuffer();
+            currentFile = file;
             document.getElementById('upload-card').style.display = 'none';
             document.getElementById('editor-workspace').style.display = 'block';
 
-            renderLightPDFMode(rawPdfBytes);
+            const reader = new FileReader();
+            reader.onload = function() {
+                renderPDF(new Uint8Array(this.result));
+            };
+            reader.readAsArrayBuffer(file);
         }
 
-        async function renderLightPDFMode(data) {
+        async function renderPDF(data) {
             const loadingTask = pdfjsLib.getDocument({ data });
-            pdfDoc = await loadingTask.promise;
+            const pdfDoc = await loadingTask.promise;
             const container = document.getElementById('pdf-container');
             container.innerHTML = '';
 
@@ -217,13 +222,13 @@ HTML_TEMPLATE = """
 
                 await page.render({ canvasContext: context, viewport: viewport }).promise;
 
-                // Create Interactive Text Layer (LightPDF Engine Concept)
                 const textLayerDiv = document.createElement('div');
                 textLayerDiv.className = 'text-layer';
-                
+
                 const textContent = await page.getTextContent();
-                
                 textContent.items.forEach((item) => {
+                    if (!item.str.trim()) return;
+
                     const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
                     const fontHeight = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]);
 
@@ -232,27 +237,12 @@ HTML_TEMPLATE = """
                     span.style.left = `${tx[4]}px`;
                     span.style.top = `${tx[5] - fontHeight}px`;
                     span.style.fontSize = `${fontHeight}px`;
-                    span.style.fontFamily = item.fontName || 'sans-serif';
 
-                    // Enable LightPDF direct inline editing on click
-                    span.onclick = (ev) => {
-                        ev.stopPropagation();
-                        span.contentEditable = true;
-                        span.focus();
-                    };
-
-                    span.onblur = () => {
-                        span.contentEditable = false;
-                        editedItems.push({
-                            pageNum: pageNum,
-                            originalText: item.str,
-                            newText: span.textContent,
-                            x: tx[4] / 1.5,
-                            y: (viewport.height - tx[5]) / 1.5,
-                            fontSize: fontHeight / 1.5,
-                            width: item.width * 1.5,
-                            height: fontHeight
-                        });
+                    span.onclick = () => {
+                        selectedTargetText = item.str;
+                        document.getElementById('modal-old-text').value = item.str;
+                        document.getElementById('modal-new-text').value = item.str;
+                        document.getElementById('edit-modal').style.display = 'flex';
                     };
 
                     textLayerDiv.appendChild(span);
@@ -264,39 +254,34 @@ HTML_TEMPLATE = """
             }
         }
 
-        async function exportPDF() {
-            const { PDFDocument, rgb } = PDFLib;
-            const pdfDoc = await PDFDocument.load(rawPdfBytes);
+        function closeModal() {
+            document.getElementById('edit-modal').style.display = 'none';
+        }
 
-            for (const edit of editedItems) {
-                const page = pdfDoc.getPage(edit.pageNum - 1);
-                
-                // Redact old text area by drawing white rectangle over original coordinates
-                page.drawRectangle({
-                    x: edit.x,
-                    y: edit.y - 2,
-                    width: edit.width,
-                    height: edit.fontSize + 4,
-                    color: rgb(1, 1, 1),
-                });
+        async function applyBackendEdit() {
+            const newText = document.getElementById('modal-new-text').value;
+            closeModal();
 
-                // Render updated text exact at original position
-                if (edit.newText) {
-                    page.drawText(edit.newText, {
-                        x: edit.x,
-                        y: edit.y,
-                        size: edit.fontSize,
-                        color: rgb(0, 0, 0),
-                    });
-                }
+            const formData = new FormData();
+            formData.append('pdf', currentFile);
+            formData.append('old_text', selectedTargetText);
+            formData.append('new_text', newText);
+
+            const response = await fetch('/edit-pdf', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const downloadUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = 'edited_output.pdf';
+                a.click();
+            } else {
+                alert('Error updating PDF text');
             }
-
-            const modifiedPdfBytes = await pdfDoc.save();
-            const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'edited_document.pdf';
-            link.click();
         }
     </script>
 </body>
@@ -306,6 +291,38 @@ HTML_TEMPLATE = """
 @app.route('/', methods=['GET'])
 def home():
     return render_template_string(HTML_TEMPLATE)
+
+@app.route('/edit-pdf', methods=['POST'])
+def edit_pdf():
+    try:
+        if 'pdf' not in request.files:
+            return jsonify({"error": "PDF file missing"}), 400
+            
+        file = request.files['pdf']
+        old_text = request.form.get('old_text', '')
+        new_text = request.form.get('new_text', '')
+
+        if not old_text:
+            return jsonify({"error": "Old text is required"}), 400
+
+        doc = fitz.open(stream=file.read(), filetype="pdf")
+
+        for page in doc:
+            text_instances = page.search_for(old_text)
+            for inst in text_instances:
+                # Direct PyMuPDF native vector redaction to keep layout clean
+                page.add_redact_annot(inst, fill=(1, 1, 1))
+                page.apply_redactions()
+
+                if new_text:
+                    page.insert_text(inst.tl, new_text, fontsize=9, color=(0, 0, 0))
+
+        output_path = "edited_output.pdf"
+        doc.save(output_path)
+        return send_file(output_path, as_attachment=True, download_name="edited.pdf")
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
