@@ -1,18 +1,53 @@
 import os
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, send_file, jsonify, render_template_string
 from flask_cors import CORS
 import fitz  # PyMuPDF engine
 
 app = Flask(__name__)
 CORS(app)
 
-# Root route to prevent 404 error when accessing the homepage
+# HTML interface for testing directly in the browser
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Text Replacer</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        h2 { text-align: center; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], input[type="file"] { width: 100%; padding: 8px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <h2>PDF Text Replacer</h2>
+    <form action="/edit-pdf" method="post" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="pdf">Select PDF File:</label>
+            <input type="file" id="pdf" name="pdf" accept=".pdf" required>
+        </div>
+        <div class="form-group">
+            <label for="old_text">Text to Replace:</label>
+            <input type="text" id="old_text" name="old_text" placeholder="Enter target text" required>
+        </div>
+        <div class="form-group">
+            <label for="new_text">New Text:</label>
+            <input type="text" id="new_text" name="new_text" placeholder="Enter replacement text">
+        </div>
+        <button type="submit">Process & Download PDF</button>
+    </form>
+</body>
+</html>
+"""
+
 @app.route('/', methods=['GET'])
 def home():
-    return jsonify({
-        "status": "online",
-        "message": "PDF Editor API is running successfully."
-    }), 200
+    return render_template_string(HTML_TEMPLATE)
 
 @app.route('/edit-pdf', methods=['POST'])
 def edit_pdf():
@@ -32,11 +67,11 @@ def edit_pdf():
         for page in doc:
             text_instances = page.search_for(old_text)
             for inst in text_instances:
-                # 1. Vector level Redaction (Text permanent erase karna)
+                # 1. Vector level Redaction
                 page.add_redact_annot(inst, fill=(1, 1, 1))
                 page.apply_redactions()
 
-                # 2. Exact same location par naya text print karna
+                # 2. Insert new text at exact same coordinates
                 if new_text:
                     page.insert_text(inst.tl, new_text, fontsize=9, color=(0, 0, 0))
 
