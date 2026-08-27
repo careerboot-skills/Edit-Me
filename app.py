@@ -11,7 +11,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit.Me - PDF Editor</title>
+    <title>Edit.Me - LightPDF Style Editor</title>
     <!-- PDF.js & pdf-lib Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -29,12 +29,12 @@ HTML_TEMPLATE = """
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
         body { background-color: var(--bg-dark); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
 
-        /* Header Branding */
+        /* Premium Header */
         header {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(30, 41, 59, 0.9);
             backdrop-filter: blur(12px);
             border-bottom: 1px solid rgba(255,255,255,0.1);
-            padding: 1rem 2rem;
+            padding: 0.8rem 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -44,51 +44,50 @@ HTML_TEMPLATE = """
         }
 
         .brand-container { display: flex; align-items: center; gap: 12px; }
-        .logo-svg { width: 38px; height: 38px; filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5)); }
-        .brand-title { font-size: 1.5rem; font-weight: 800; background: linear-gradient(135deg, #818cf8, #06b6d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .co-brand { font-size: 0.85rem; color: #94a3b8; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+        .logo-svg { width: 36px; height: 36px; filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5)); }
+        .brand-title { font-size: 1.4rem; font-weight: 800; background: linear-gradient(135deg, #818cf8, #06b6d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .co-brand { font-size: 0.85rem; color: #94a3b8; font-weight: 500; }
         .co-brand span { color: var(--accent); font-weight: 700; }
 
-        /* Main Container */
-        main { flex: 1; padding: 2rem; display: flex; flex-direction: column; align-items: center; }
+        /* Main Workspace */
+        main { flex: 1; padding: 1.5rem; display: flex; flex-direction: column; align-items: center; }
 
-        /* Animated Upload Zone */
         .upload-card {
             background: var(--card-bg);
             border: 2px dashed rgba(99, 102, 241, 0.4);
             border-radius: 20px;
             padding: 4rem 2rem;
             text-align: center;
-            max-width: 600px;
+            max-width: 550px;
             width: 100%;
             cursor: pointer;
             transition: all 0.3s ease;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            animation: fadeIn 0.8s ease-out;
+            margin-top: 3rem;
         }
 
         .upload-card:hover {
             border-color: var(--primary);
             transform: translateY(-4px);
-            box-shadow: 0 15px 35px rgba(99, 102, 241, 0.2);
         }
 
-        .upload-icon { font-size: 3.5rem; color: var(--primary); margin-bottom: 1rem; animation: bounce 2s infinite; }
-        .btn-upload { background: linear-gradient(135deg, var(--primary), var(--accent)); color: white; padding: 12px 28px; border-radius: 30px; border: none; font-weight: 600; margin-top: 1.5rem; cursor: pointer; transition: 0.2s; }
-        .btn-upload:hover { opacity: 0.9; transform: scale(1.03); }
+        .upload-icon { font-size: 3.5rem; color: var(--primary); margin-bottom: 1rem; }
+        .btn-upload { background: linear-gradient(135deg, var(--primary), var(--accent)); color: white; padding: 12px 28px; border-radius: 30px; border: none; font-weight: 600; margin-top: 1.5rem; cursor: pointer; }
 
-        /* Editor Workspace */
-        #editor-workspace { display: none; width: 100%; max-width: 1000px; animation: fadeIn 0.5s ease-in-out; }
+        /* LightPDF Style Toolbar */
+        #editor-workspace { display: none; width: 100%; max-width: 1100px; }
         .toolbar {
             background: var(--card-bg);
-            padding: 1rem;
+            padding: 0.8rem 1.2rem;
             border-radius: 12px;
             display: flex;
             gap: 12px;
             margin-bottom: 1.5rem;
-            flex-wrap: wrap;
             align-items: center;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            position: sticky;
+            top: 70px;
+            z-index: 90;
         }
 
         .tool-btn {
@@ -101,83 +100,77 @@ HTML_TEMPLATE = """
             display: flex;
             align-items: center;
             gap: 8px;
-            transition: 0.2s;
+            font-weight: 500;
         }
-        .tool-btn:hover, .tool-btn.active { background: var(--primary); }
-
+        .tool-btn:hover { background: var(--primary); }
         .action-btn { background: #10b981; margin-left: auto; }
         .action-btn:hover { background: #059669; }
 
-        /* PDF Render Area */
-        .pdf-container {
-            display: flex;
-            flex-direction: column;
-            gap: 2rem;
-            align-items: center;
-        }
-
+        /* PDF Viewer Container */
+        .pdf-container { display: flex; flex-direction: column; gap: 2rem; align-items: center; }
         .page-wrapper {
             position: relative;
             background: white;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            border-radius: 4px;
-            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
         }
 
-        .text-overlay {
+        /* LightPDF Native Text Selection Layer */
+        .text-layer {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            pointer-events: none;
+            overflow: hidden;
+            opacity: 1;
+            line-height: 1.0;
         }
 
-        .editable-text {
+        .text-layer span {
             position: absolute;
-            background: rgba(255, 255, 255, 0.9);
-            border: 1px dashed var(--primary);
-            color: #000;
-            padding: 2px 4px;
+            color: transparent;
+            cursor: text;
+            white-space: pre;
+            transform-origin: 0% 0%;
+            border: 1px transparent dashed;
             border-radius: 2px;
-            outline: none;
-            pointer-events: auto;
-            min-width: 20px;
         }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .text-layer span:hover {
+            border-color: rgba(99, 102, 241, 0.6);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .text-layer span[contenteditable="true"] {
+            color: #000 !important;
+            background: #ffffff !important;
+            border: 1px solid var(--primary) !important;
+            outline: none;
+            z-index: 10;
+        }
     </style>
 </head>
 <body>
 
-    <!-- Header Section -->
     <header>
         <div class="brand-container">
-            <!-- Edit.Me Logo SVG -->
             <svg class="logo-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="#6366f1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                 <path d="M18.5 2.50001C18.8978 2.10219 19.4374 1.87868 20 1.87868C20.5626 1.87868 21.1022 2.10219 21.5 2.50001C21.8978 2.89784 22.1213 3.43739 22.1213 4.00001C22.1213 4.56263 21.8978 5.10219 21.5 5.50001L12 15L8 16L9 12L18.5 2.50001Z" stroke="#06b6d4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             <span class="brand-title">Edit.Me</span>
         </div>
-        <div class="co-brand">
-            Co-Powered by <span>CareerBoot</span>
-        </div>
+        <div class="co-brand">Co-Powered by <span>CareerBoot</span></div>
     </header>
 
-    <!-- Main Content -->
     <main>
-        <!-- Step 1: Upload Card -->
         <div class="upload-card" id="upload-card" onclick="document.getElementById('file-input').click()">
             <i class="fa-solid fa-file-pdf upload-icon"></i>
-            <h2>Upload your PDF Document</h2>
-            <p style="color: #94a3b8; margin-top: 8px;">Click or drag and drop your file here to edit inline</p>
-            <button class="btn-upload">Select File</button>
+            <h2>Upload PDF to Edit</h2>
+            <p style="color: #94a3b8; margin-top: 8px;">Click any text in your document to edit directly</p>
+            <button class="btn-upload">Choose PDF File</button>
             <input type="file" id="file-input" accept="application/pdf" style="display: none;" onchange="handleFileSelect(event)">
         </div>
 
-        <!-- Step 2: Interactive Editor -->
         <div id="editor-workspace">
             <div class="toolbar">
-                <button class="tool-btn active" onclick="setMode('text')"><i class="fa-solid fa-font"></i> Add/Edit Text</button>
                 <button class="tool-btn action-btn" onclick="exportPDF()"><i class="fa-solid fa-download"></i> Save & Download</button>
                 <button class="tool-btn" onclick="window.print()"><i class="fa-solid fa-print"></i> Print</button>
             </div>
@@ -187,22 +180,22 @@ HTML_TEMPLATE = """
 
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        let pdfBytes = null;
+        let rawPdfBytes = null;
         let pdfDoc = null;
-        let annotations = [];
+        let editedItems = [];
 
-        async function handleFileSelect(event) {
-            const file = event.target.files[0];
+        async function handleFileSelect(e) {
+            const file = e.target.files[0];
             if (!file) return;
 
-            pdfBytes = await file.arrayBuffer();
+            rawPdfBytes = await file.arrayBuffer();
             document.getElementById('upload-card').style.display = 'none';
             document.getElementById('editor-workspace').style.display = 'block';
 
-            renderPDF(pdfBytes);
+            renderLightPDFMode(rawPdfBytes);
         }
 
-        async function renderPDF(data) {
+        async function renderLightPDFMode(data) {
             const loadingTask = pdfjsLib.getDocument({ data });
             pdfDoc = await loadingTask.promise;
             const container = document.getElementById('pdf-container');
@@ -222,60 +215,83 @@ HTML_TEMPLATE = """
                 canvas.height = viewport.height;
                 canvas.width = viewport.width;
 
-                const renderContext = { canvasContext: context, viewport: viewport };
-                await page.render(renderContext).promise;
+                await page.render({ canvasContext: context, viewport: viewport }).promise;
 
-                const overlay = document.createElement('div');
-                overlay.className = 'text-overlay';
-                overlay.dataset.pageNum = pageNum;
+                // Create Interactive Text Layer (LightPDF Engine Concept)
+                const textLayerDiv = document.createElement('div');
+                textLayerDiv.className = 'text-layer';
+                
+                const textContent = await page.getTextContent();
+                
+                textContent.items.forEach((item) => {
+                    const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+                    const fontHeight = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]);
 
-                // Click to add text overlay element directly on the page
-                wrapper.onclick = (e) => {
-                    if(e.target !== wrapper && e.target !== canvas) return;
-                    const rect = wrapper.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
+                    const span = document.createElement('span');
+                    span.textContent = item.str;
+                    span.style.left = `${tx[4]}px`;
+                    span.style.top = `${tx[5] - fontHeight}px`;
+                    span.style.fontSize = `${fontHeight}px`;
+                    span.style.fontFamily = item.fontName || 'sans-serif';
 
-                    const input = document.createElement('div');
-                    input.contentEditable = true;
-                    input.className = 'editable-text';
-                    input.style.left = `${x}px`;
-                    input.style.top = `${y}px`;
-                    input.innerText = 'New Text';
+                    // Enable LightPDF direct inline editing on click
+                    span.onclick = (ev) => {
+                        ev.stopPropagation();
+                        span.contentEditable = true;
+                        span.focus();
+                    };
 
-                    overlay.appendChild(input);
-                    input.focus();
+                    span.onblur = () => {
+                        span.contentEditable = false;
+                        editedItems.push({
+                            pageNum: pageNum,
+                            originalText: item.str,
+                            newText: span.textContent,
+                            x: tx[4] / 1.5,
+                            y: (viewport.height - tx[5]) / 1.5,
+                            fontSize: fontHeight / 1.5,
+                            width: item.width * 1.5,
+                            height: fontHeight
+                        });
+                    };
 
-                    annotations.push({ pageNum, x, y, input });
-                };
+                    textLayerDiv.appendChild(span);
+                });
 
                 wrapper.appendChild(canvas);
-                wrapper.appendChild(overlay);
+                wrapper.appendChild(textLayerDiv);
                 container.appendChild(wrapper);
             }
         }
 
         async function exportPDF() {
             const { PDFDocument, rgb } = PDFLib;
-            const loadedPdf = await PDFDocument.load(pdfBytes);
+            const pdfDoc = await PDFDocument.load(rawPdfBytes);
 
-            for (const item of annotations) {
-                const page = loadedPdf.getPage(item.pageNum - 1);
-                const { height } = page.getSize();
+            for (const edit of editedItems) {
+                const page = pdfDoc.getPage(edit.pageNum - 1);
                 
-                // Scale factor between Canvas viewport scale (1.5) and PDF coordinates
-                const text = item.input.innerText;
-                if(text) {
-                    page.drawText(text, {
-                        x: item.x / 1.5,
-                        y: height - (item.y / 1.5) - 10,
-                        size: 12,
+                // Redact old text area by drawing white rectangle over original coordinates
+                page.drawRectangle({
+                    x: edit.x,
+                    y: edit.y - 2,
+                    width: edit.width,
+                    height: edit.fontSize + 4,
+                    color: rgb(1, 1, 1),
+                });
+
+                // Render updated text exact at original position
+                if (edit.newText) {
+                    page.drawText(edit.newText, {
+                        x: edit.x,
+                        y: edit.y,
+                        size: edit.fontSize,
                         color: rgb(0, 0, 0),
                     });
                 }
             }
 
-            const modifiedPdfBytes = await loadedPdf.save();
+            const modifiedPdfBytes = await pdfDoc.save();
             const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
