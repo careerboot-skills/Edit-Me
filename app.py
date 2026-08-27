@@ -6,6 +6,14 @@ import fitz  # PyMuPDF engine
 app = Flask(__name__)
 CORS(app)
 
+# Root route to prevent 404 error when accessing the homepage
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({
+        "status": "online",
+        "message": "PDF Editor API is running successfully."
+    }), 200
+
 @app.route('/edit-pdf', methods=['POST'])
 def edit_pdf():
     try:
