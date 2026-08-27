@@ -28,7 +28,6 @@ HTML_TEMPLATE = """
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
         body { background-color: var(--bg-dark); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
 
-        /* Header Branding */
         header {
             background: rgba(30, 41, 59, 0.9);
             backdrop-filter: blur(12px);
@@ -48,7 +47,6 @@ HTML_TEMPLATE = """
         .co-brand { font-size: 0.85rem; color: #94a3b8; font-weight: 500; }
         .co-brand span { color: var(--accent); font-weight: 700; }
 
-        /* Main Section */
         main { flex: 1; padding: 2rem; display: flex; flex-direction: column; align-items: center; }
 
         .upload-card {
@@ -69,14 +67,13 @@ HTML_TEMPLATE = """
         .upload-icon { font-size: 3.5rem; color: var(--primary); margin-bottom: 1rem; }
         .btn-upload { background: linear-gradient(135deg, var(--primary), var(--accent)); color: white; padding: 12px 28px; border-radius: 30px; border: none; font-weight: 600; margin-top: 1.5rem; cursor: pointer; }
 
-        /* Editor Workspace */
         #editor-workspace { display: none; width: 100%; max-width: 1100px; }
         .toolbar {
             background: var(--card-bg);
             padding: 0.8rem 1.2rem;
             border-radius: 12px;
             display: flex;
-            gap: 12px;
+            justify-content: space-between;
             margin-bottom: 1.5rem;
             align-items: center;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
@@ -88,15 +85,16 @@ HTML_TEMPLATE = """
         .pdf-container { display: flex; flex-direction: column; gap: 2rem; align-items: center; }
         .page-wrapper { position: relative; background: white; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
 
-        .text-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; }
+        .text-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
         .text-layer span {
             position: absolute;
             color: transparent;
-            cursor: pointer;
+            cursor: text;
             white-space: pre;
             transform-origin: 0% 0%;
             border: 1px transparent dashed;
             border-radius: 2px;
+            pointer-events: auto;
         }
 
         .text-layer span:hover {
@@ -104,7 +102,6 @@ HTML_TEMPLATE = """
             background: rgba(99, 102, 241, 0.15);
         }
 
-        /* Edit Modal Popup */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -158,12 +155,12 @@ HTML_TEMPLATE = """
         <div id="editor-workspace">
             <div class="toolbar">
                 <span style="font-weight: 600; color: #94a3b8;">Click on any text on the page to modify</span>
+                <button class="btn-save" onclick="applyBackendEdit()">Export & Download PDF</button>
             </div>
             <div id="pdf-container" class="pdf-container"></div>
         </div>
     </main>
 
-    <!-- Modal Popup for precise backend editing -->
     <div class="modal-overlay" id="edit-modal">
         <div class="modal">
             <h3>Edit Text Element</h3>
@@ -175,7 +172,7 @@ HTML_TEMPLATE = """
             
             <div class="modal-buttons">
                 <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-                <button class="btn-save" onclick="applyBackendEdit()">Apply & Download PDF</button>
+                <button class="btn-save" onclick="saveElementEdit()">Update Element</button>
             </div>
         </div>
     </div>
@@ -183,7 +180,8 @@ HTML_TEMPLATE = """
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
         let currentFile = null;
-        let selectedTargetText = '';
+        let activeTargetElement = null;
+        let editsQueue = [];
 
         function handleFileSelect(e) {
             const file = e.target.files[0];
@@ -208,7 +206,8 @@ HTML_TEMPLATE = """
 
             for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
                 const page = await pdfDoc.getPage(pageNum);
-                const viewport = page.getViewport({ scale: 1.5 });
+                const scale = 1.5;
+                const viewport = page.getViewport({ scale });
 
                 const wrapper = document.createElement('div');
                 wrapper.className = 'page-wrapper';
@@ -238,10 +237,19 @@ HTML_TEMPLATE = """
                     span.style.top = `${tx[5] - fontHeight}px`;
                     span.style.fontSize = `${fontHeight}px`;
 
+                    // Store precise coordinates for PyMuPDF Engine (Normalized to original scale)
+                    span.dataset.pageNum = pageNum - 1;
+                    span.dataset.oldText = item.str;
+                    span.dataset.pdfX = tx[4] / scale;
+                    span.dataset.pdfY = (tx[5] - fontHeight) / scale;
+                    span.dataset.fontSize = fontHeight / scale;
+                    span.dataset.width = (item.width * scale) / scale;
+                    span.dataset.height = fontHeight / scale;
+
                     span.onclick = () => {
-                        selectedTargetText = item.str;
-                        document.getElementById('modal-old-text').value = item.str;
-                        document.getElementById('modal-new-text').value = item.str;
+                        activeTargetElement = span;
+                        document.getElementById('modal-old-text').value = span.textContent;
+                        document.getElementById('modal-new-text').value = span.textContent;
                         document.getElementById('edit-modal').style.display = 'flex';
                     };
 
@@ -258,14 +266,39 @@ HTML_TEMPLATE = """
             document.getElementById('edit-modal').style.display = 'none';
         }
 
-        async function applyBackendEdit() {
+        function saveElementEdit() {
+            if (!activeTargetElement) return;
+
             const newText = document.getElementById('modal-new-text').value;
+            const oldText = activeTargetElement.dataset.oldText;
+
+            // Update UI preview visually
+            activeTargetElement.textContent = newText;
+            activeTargetElement.style.color = '#000';
+            activeTargetElement.style.background = '#ffffff';
+
+            editsQueue.push({
+                page_num: parseInt(activeTargetElement.dataset.pageNum),
+                old_text: oldText,
+                new_text: newText,
+                x: parseFloat(activeTargetElement.dataset.pdfX),
+                y: parseFloat(activeTargetElement.dataset.pdfY),
+                width: parseFloat(activeTargetElement.dataset.width),
+                font_size: parseFloat(activeTargetElement.dataset.fontSize)
+            });
+
             closeModal();
+        }
+
+        async function applyBackendEdit() {
+            if (editsQueue.length === 0) {
+                alert("No changes made to export!");
+                return;
+            }
 
             const formData = new FormData();
             formData.append('pdf', currentFile);
-            formData.append('old_text', selectedTargetText);
-            formData.append('new_text', newText);
+            formData.append('edits', JSON.stringify(editsQueue));
 
             const response = await fetch('/edit-pdf', {
                 method: 'POST',
@@ -295,27 +328,42 @@ def home():
 @app.route('/edit-pdf', methods=['POST'])
 def edit_pdf():
     try:
+        import json
+
         if 'pdf' not in request.files:
             return jsonify({"error": "PDF file missing"}), 400
-            
-        file = request.files['pdf']
-        old_text = request.form.get('old_text', '')
-        new_text = request.form.get('new_text', '')
 
-        if not old_text:
-            return jsonify({"error": "Old text is required"}), 400
+        file = request.files['pdf']
+        edits_json = request.form.get('edits', '[]')
+        edits = json.loads(edits_json)
 
         doc = fitz.open(stream=file.read(), filetype="pdf")
 
-        for page in doc:
-            text_instances = page.search_for(old_text)
-            for inst in text_instances:
-                # Direct PyMuPDF native vector redaction to keep layout clean
-                page.add_redact_annot(inst, fill=(1, 1, 1))
-                page.apply_redactions()
+        for edit in edits:
+            page_num = edit['page_num']
+            old_text = edit['old_text']
+            new_text = edit['new_text']
+            font_size = edit['font_size']
 
-                if new_text:
-                    page.insert_text(inst.tl, new_text, fontsize=9, color=(0, 0, 0))
+            if page_num < len(doc):
+                page = doc[page_num]
+                rects = page.search_for(old_text)
+
+                if rects:
+                    # Select precise bounding box targeting target position
+                    target_rect = rects[0]
+                    page.add_redact_annot(target_rect, fill=(1, 1, 1))
+                    page.apply_redactions()
+
+                    if new_text:
+                        # Baseline adjustment for vector text placement
+                        baseline_point = fitz.Point(target_rect.x0, target_rect.y1 - 1.5)
+                        page.insert_text(
+                            baseline_point, 
+                            new_text, 
+                            fontsize=font_size if font_size > 0 else 10, 
+                            color=(0, 0, 0)
+                        )
 
         output_path = "edited_output.pdf"
         doc.save(output_path)
